@@ -476,22 +476,21 @@ at the `npm publish` step.
 # Bump the version (edits package.json, no git action):
 npm version patch --no-git-tag-version   # or minor/major
 git add package.json package-lock.json
-git commit -m "chore(release): v0.1.2"
+git commit -m "chore(release): v0.1.1"
 
 # Tag and push — this is what actually triggers publish.yml:
-git tag v0.1.2
+git tag v0.1.1
 git push origin main
-git push origin v0.1.2
-# → publish.yml builds, tests, and publishes @zincapp/znvault-plugin-trust@0.1.2
+git push origin v0.1.1
+# → publish.yml builds, tests, and publishes @zincapp/znvault-plugin-trust@0.1.1
 ```
 
-**Version history note.** `0.1.1` is the first published version, and it was
-published manually (from an operator machine, without provenance) rather than
-through the workflow above, because the trusted-publisher registration wasn't
-in place yet. `0.1.0` was published and then unpublished the same day; that
-version number is permanently retired and can never be republished — npm
-refuses to reuse an unpublished version. Every release from `0.1.2` onward
-should go through the tag-triggered workflow.
+**Version history note.** `0.1.1` is the first version published through this
+workflow, and the first with provenance. `0.1.0` was published manually and
+unpublished the same day; that version number is permanently retired and can
+never be republished, since npm refuses to reuse an unpublished version.
+Every release goes through the tag-triggered workflow above — publishing by
+hand from an operator machine is not part of this package's release process.
 
 ## License
 
