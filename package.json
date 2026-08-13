@@ -1,0 +1,68 @@
+{
+  "name": "@zincapp/znvault-plugin-trust",
+  "version": "0.1.1",
+  "description": "Trust portal deployment plugin for zn-vault-agent + znvault CLI (release-dir deploys, atomic symlink activation, Prisma dynamic-secret migrations)",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./cli": {
+      "import": "./dist/cli.js",
+      "types": "./dist/cli.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:prod": "npm run clean && tsc --sourceMap false",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint 'src/**/*.ts' 'test/**/*.ts'",
+    "prepublishOnly": "npm run build:prod"
+  },
+  "dependencies": {
+    "@zincapp/znvault-deploy-core": "^0.1.1",
+    "@zincapp/znvault-migrate": "^1.0.1"
+  },
+  "peerDependencies": {
+    "@zincapp/zn-vault-agent": ">=1.20.14",
+    "@zincapp/znvault-cli": ">=2.11.0"
+  },
+  "peerDependenciesMeta": {
+    "@zincapp/zn-vault-agent": {
+      "optional": true
+    },
+    "@zincapp/znvault-cli": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10",
+    "@typescript-eslint/eslint-plugin": "^8.63.0",
+    "@typescript-eslint/parser": "^8.63.0",
+    "@zincapp/zn-vault-agent": "^1.20.14",
+    "commander": "^14.0.2",
+    "eslint": "^9.39.2",
+    "fastify": "^5.7.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.17"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vidaldiego/znvault-plugin-trust.git"
+  },
+  "license": "MIT"
+}

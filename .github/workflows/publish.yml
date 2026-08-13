@@ -1,0 +1,65 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          # Do NOT pass `registry-url` here. setup-node writes a stub
+          # `_authToken=${NODE_AUTH_TOKEN}` line into .npmrc when this is
+          # set, which forces npm into classic Bearer-token auth and
+          # bypasses OIDC trusted publishing. With Trusted Publishers
+          # enabled on npm.com, npm picks up the GitHub OIDC token from
+          # ACTIONS_ID_TOKEN_REQUEST_URL/TOKEN automatically.
+
+      - name: Update npm for OIDC support
+        # OIDC Trusted Publishing requires npm >= 11.5.1. The 10.x line
+        # falls back to classic Bearer-token auth and returns ENEEDAUTH
+        # in this workflow. Pin to a known-good 11.x.
+        run: npm install -g npm@11.10.1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Publish to npm (Trusted Publishing via OIDC)
+        # --loglevel=verbose forces npm to dump the full HTTP response
+        # body from the registry on failure. With Trusted Publishing,
+        # npm.com's 404 responses include a JSON body explaining which
+        # OIDC claim failed to match the configured publisher.
+        run: npm publish --access public --provenance --loglevel=verbose
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          draft: false
