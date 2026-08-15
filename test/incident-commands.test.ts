@@ -82,7 +82,7 @@ function makeDeps(routes: Record<string, RouteHandler>, overrides: Partial<Incid
   const fetchFn = makeFetch({ ...LOGIN_OK, ...routes });
   const deps: IncidentCommandDeps & { fetchFn: typeof fetchFn } = {
     fetchFn,
-    resolveCredentials: vi.fn(async () => ({ email: 'import-bot@zincapp.com', password: PASSWORD, totpSecret: SEED })),
+    resolveCredentials: vi.fn(async () => ({ email: 'import-bot@example.com', password: PASSWORD, totpSecret: SEED })),
     totp: vi.fn(async () => '123456'),
     repoContext: () => ({ repo: 'teltonika-gateway', root: '/src/teltonika-gateway', commit: 'abc1234' }),
     env: { TRUST_API: 'https://trust.example.test' },

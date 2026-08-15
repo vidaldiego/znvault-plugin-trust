@@ -23,7 +23,7 @@ import {
 
 const SEED = 'JBSWY3DPEHPK3PXP';
 
-function makeVaultClient(secret: unknown = { data: { email: 'import-bot@zincapp.com', password: 'p4ssw0rd', totpSecret: SEED } }) {
+function makeVaultClient(secret: unknown = { data: { email: 'import-bot@example.com', password: 'p4ssw0rd', totpSecret: SEED } }) {
   const get = vi.fn(async (path: string) => {
     if (path.startsWith('/v1/secrets/alias/')) return { id: 'sec-uuid-1' };
     throw new Error(`unexpected GET ${path}`);
@@ -88,7 +88,7 @@ describe('resolveTrustCredentials', () => {
   it('reads the import-bot credential from vault by default — never from a flag', async () => {
     const client = makeVaultClient();
     const creds = await resolveTrustCredentials(client, {});
-    expect(creds).toEqual({ email: 'import-bot@zincapp.com', password: 'p4ssw0rd', totpSecret: SEED });
+    expect(creds).toEqual({ email: 'import-bot@example.com', password: 'p4ssw0rd', totpSecret: SEED });
     expect(client.get).toHaveBeenCalledWith(`/v1/secrets/alias/${encodeURIComponent(DEFAULT_CREDENTIAL_ALIAS)}`);
     expect(client.post).toHaveBeenCalledWith('/v1/secrets/sec-uuid-1/decrypt', {});
   });
@@ -102,11 +102,11 @@ describe('resolveTrustCredentials', () => {
   it('lets explicit env vars win and does not touch vault at all', async () => {
     const client = makeVaultClient();
     const creds = await resolveTrustCredentials(client, {
-      TRUST_EMAIL: 'ci@zincapp.com',
+      TRUST_EMAIL: 'ci@example.com',
       TRUST_PASSWORD: 'ci-pass',
       TRUST_TOTP_SECRET: SEED,
     });
-    expect(creds.email).toBe('ci@zincapp.com');
+    expect(creds.email).toBe('ci@example.com');
     expect(client.get).not.toHaveBeenCalled();
     expect(client.post).not.toHaveBeenCalled();
   });
