@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "@zincapp/znvault-deploy-core": "^0.1.1",
-    "@zincapp/znvault-migrate": "^1.0.1"
+    "@zincapp/znvault-migrate": "^1.0.1",
+    "otplib": "^12.0.1"
   },
   "peerDependencies": {
     "@zincapp/zn-vault-agent": ">=1.20.14",

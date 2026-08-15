@@ -7,6 +7,10 @@ atomic symlink activation, Prisma migrations through a short-lived
 dynamic-secrets lease, a 1+R canary on the `api` class with HAProxy drain, and
 a non-blocking sequential rollout of the `workers` class deployed **first**.
 
+It also carries [`znvault trust incident`](#incident-capture-from-any-repository)
+— the CLI half of ISMS incident capture, which talks to the running portal's own
+API rather than to the agent.
+
 Dual entry:
 
 - **Agent** (`.` → `dist/index.js`) — `createTrustPlugin(config)` mounts the
@@ -225,7 +229,18 @@ znvault trust config set prod --file trust-prod.json
 znvault trust deploy run prod --version 0.2.0 [--dry-run|--class …|--skip-migrations|--pre-only|--post-only|--skip-drain]
 znvault trust status prod
 znvault trust rollback prod --host <ip> --to <version> --confirm <hostname>
+
+znvault trust incident capture  --summary … [--type …] [--severity …] [--control A.5.24]… [--detail k=v]… [--file post-mortem.md] [--id <key>]
+znvault trust incident list     [--status …] [--severity …] [--pending]
+znvault trust incident show     <id>
+znvault trust incident promote  <id> --severity … [--regime …] [--title …]
+znvault trust incident timeline <id> --at <iso> --what …
+znvault trust incident evidence <id> --file … [--control A.8.15]… [--note …]
+znvault trust incident close    <id> --root-cause … [--action …]… [--action-priority …]
 ```
+
+Every command takes `--json` (machine-readable, human lines suppressed) and
+`--api-url` (default `$TRUST_API`, then `https://trust.zincapp.com`).
 
 ### `deploy run`
 
@@ -305,6 +320,157 @@ good flip back — pull the node out of rotation manually first if it's
 serving live traffic and you want a clean cutover). `--host`, `--to`, and
 `--confirm` are all `commander` `requiredOption`s — commander itself refuses
 to run the action without them, before any network call.
+
+## Incident capture from any repository
+
+`znvault trust incident …` is the odd one out in this plugin: it does **not**
+talk to the zn-vault-agent's `/plugins/trust/*` routes on a node. It talks to
+the Trust **portal's** own API (`/api/v1/…`) as an authenticated ISMS user. It
+lives here because that is where an operator looks for anything trust-shaped,
+not because it shares a transport with `deploy`.
+
+It exists because of a measurable gap: the portal's incident register is at
+**zero** while a sweep of this workspace's 57 repositories finds **~40 real,
+documented incidents**. The analysis is not missing — there are cronologies to
+the millisecond and root causes proven with packet captures. It just never
+leaves the repository where it happened, because the moment you hit an incident
+is the worst possible moment to ask anyone to open a browser and fill in a form.
+So capture has to cost seconds, from wherever you already are.
+
+Design: [`trust/docs/2026-08-15-captura-de-incidentes-desde-cualquier-repo.md`](https://github.com/vidaldiego/trust)
+(§4.2 is this command family; §4.1 the API it calls; §4.3 the MCP tools).
+
+### Authentication — vault, never a flag
+
+The portal has no long-lived service key: the only non-interactive way in is a
+local account with a password and TOTP (internal humans sign in with Google SSO
+and have no password at all). The CLI authenticates as the dedicated
+**`import-bot`** account, whose credential lives in vault at
+**`trust/import-manager`** as `{ "email": …, "password": …, "totpSecret": … }`.
+
+It is read **in-process through the CLI's own authenticated vault client** — the
+same session `znvault secret decrypt` would use — so there is nothing to
+configure and nothing to pass. **There is deliberately no `--password` /
+`--totp` flag:** a credential on a command line lands in `~/.zsh_history`
+verbatim, which is both factors of an ISMS account leaked into a file nobody
+ever rotates.
+
+For CI, three env vars override vault, in this order of precedence:
+
+| Variable | Purpose |
+|---|---|
+| `TRUST_EMAIL` / `TRUST_PASSWORD` / `TRUST_TOTP_SECRET` | Explicit credential (base32 **seed**, not a code) |
+| `TRUST_TOTP` | A pre-generated 6-digit code, instead of the seed |
+| `TRUST_CREDENTIALS_JSON` | Captured output of `znvault secret decrypt trust/import-manager --json` |
+| `TRUST_CREDENTIAL_ALIAS` | Read the credential from a different vault alias |
+
+`TRUST_CREDENTIALS_JSON` is parsed **line by line**, not by seeking the first
+`{`: `znvault … --json` prints a banner before the payload unless `-q` is
+passed, and that banner itself starts with `[` (`[znvault v4.19.0] [profile:
+prod]`), so a naive bracket scan lands *inside it*. The same two failure modes
+that trust's own import scripts hit are handled with an instruction rather than
+a diagnosis — an unsubstituted `…` placeholder, and a 6-digit code put where the
+base32 seed belongs.
+
+### `incident capture`
+
+```bash
+# a candidate, captured in seconds from the repo where it happened
+znvault trust incident capture \
+  --summary "etcd filled to 2GB and took Patroni down" \
+  --type outage --severity CRITICAL \
+  --control A.8.16 --detail host=etcd-1
+
+# an already-written post-mortem, loaded whole
+znvault trust incident capture --file docs/POSTMORTEM-2026-06-13-etcd.md --severity HIGH
+```
+
+A capture creates a **candidate** (`SecurityEvent`), not an incident. That is
+the portal's charter — "AI-augmented, human-decided" — and it is also what keeps
+false positives out of the register an auditor reads. A person confirms severity
+and regime at `promote`.
+
+**The id is derived, deterministic, and printed.** Without `--id` the
+idempotency key is `<repo>/<slug-or-path>@<sha256[0:8]>`:
+
+```
+teltonika-gateway/etcd-filled-to-2gb-and-took-patroni-down@3f7a21c9
+trust/docs/POSTMORTEM-2026-06-13-etcd.md@9b40e1d2
+```
+
+- the repository name comes from `git rev-parse --show-toplevel` (falling back
+  to the working directory's basename outside a checkout — a capture from
+  `/var/log` still beats no capture);
+- a **candidate** is keyed on the summary, normalised for case, punctuation and
+  whitespace, so the same finding retyped a week later maps to the same key;
+- a **post-mortem** is keyed on its path relative to the repo root, so editing
+  the document's wording updates the existing incident instead of minting a
+  second one.
+
+Never random, never seeded from the clock: the API is idempotent on this key, so
+an unstable one would turn every re-run into a duplicate. The derived key is
+always printed — reuse it verbatim with `--id`.
+
+`--file` goes through **`POST /api/v1/incidents/ingest`**, which already exists,
+is already idempotent, and already reports dropped control codes. It reads the
+title from the first `# ` heading and the cronology from a `Timeline` /
+`Cronología` section (list items or a markdown table). A bare wall-clock time is
+anchored to the date in the filename and read as **UTC** — deliberately not the
+machine's local zone, so the same document ingests identically from a Mac and
+from the UTC dev VM — and the original reading is kept in the note text so
+nothing is lost. A document with no recognisable cronology is still ingested,
+with a warning.
+
+`capture` also attaches the repository and the current short commit as `detail`
+without being asked; `--detail k=v` adds anything else.
+
+### A bad control code never costs a capture
+
+The API answers an unknown control code with `droppedControlCodes` instead of
+rejecting the request, and this CLI mirrors that exactly: the dropped codes come
+out as a loud warning, the capture is still recorded, and the exit code is still
+0. Losing an entire incident to a mistyped `A.5.24` is the worst outcome
+available here.
+
+Severities are translated rather than refused, too. A candidate takes
+`INFO|WARNING|CRITICAL` and an incident `LOW|MEDIUM|HIGH|CRITICAL`; passing one
+vocabulary where the other belongs maps it across and says so.
+
+### `promote` and `close` are human commands
+
+Both exist here and **neither has an MCP counterpart** (design §4.3 ships
+`capture_incident`, `list_incidents`, `get_incident`, `add_incident_timeline`
+and `attach_incident_evidence`, and stops there). That asymmetry is not an
+oversight: confirming that a candidate is a real incident at a chosen severity,
+and declaring an incident closed, are the two acts of judgement the portal's
+founding act reserves to a person. **That an agent cannot close an incident is
+not a technical limitation — it is the control.**
+
+```bash
+znvault trust incident promote evt-1 --severity HIGH [--regime GDPR_BREACH]
+znvault trust incident close inc-7 --root-cause "etcd never auto-compacted" \
+  --action "enable auto-compaction on every etcd" --action "alert on db size"
+```
+
+`close` records the root cause on the timeline and opens the corrective actions
+**before** touching the state, then walks the incident forward through the
+server's own forward-only machine (`OPEN → RESOLVED → CLOSED`) rather than
+failing with "illegal incident transition OPEN → CLOSED" and leaving you to
+guess the ladder.
+
+### `list`, `show`, `timeline`, `evidence`
+
+```bash
+znvault trust incident list --pending          # candidates awaiting a human decision
+znvault trust incident list --status OPEN
+znvault trust incident show <id>               # accepts an incident id OR a candidate id
+znvault trust incident timeline inc-7 --at 2026-06-13T09:41:02Z --what "first alert"
+znvault trust incident evidence inc-7 --file capture.pcap --control A.8.15 --note "the capture"
+```
+
+`evidence` uploads the file as immutable, hashed evidence and links it to the
+incident, printing a locally computed SHA-256 so you can see that what the
+portal stored is byte-identical to what left the machine.
 
 ## Deploy runbook
 

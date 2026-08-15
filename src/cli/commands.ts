@@ -76,6 +76,7 @@ import {
   isScopedDeploy,
 } from '@zincapp/znvault-deploy-core';
 import { getErrorMessage } from '../utils/error.js';
+import { registerIncidentCommands, type IncidentCommandDeps } from './incident/commands.js';
 import { makeTrustRunPhase, type RunnerDeps } from './migration-runner.js';
 import {
   uploadRelease as uploadReleaseFn,
@@ -918,8 +919,20 @@ function registerRollbackCommand(trust: Command, ctx: CLIPluginContext): void {
 /**
  * Register all `znvault trust ...` command groups on the given `trust`
  * top-level command. Called from src/cli.ts's registerCommands.
+ *
+ * Two families live under `trust`, and they share nothing but the namespace:
+ * `deploy`/`status`/`rollback`/`config` talk to the zn-vault-agent's
+ * `/plugins/trust/*` routes on each node, while `incident` talks to the Trust
+ * PORTAL's own API as an authenticated ISMS user (see src/cli/incident/). They
+ * are grouped together because that is where an operator looks for anything
+ * trust-shaped — not because they share a transport.
  */
-export function registerTrustCommands(trust: Command, ctx: CLIPluginContext, deps?: DeployCommandDeps): void {
+export function registerTrustCommands(
+  trust: Command,
+  ctx: CLIPluginContext,
+  deps?: DeployCommandDeps,
+  incidentDeps?: IncidentCommandDeps,
+): void {
   const deployCmd = trust.command('deploy').description('Deploy the Trust portal (release-dir + chunked upload + atomic activation)');
   registerDeployCommands(deployCmd, ctx, deps);
 
@@ -928,6 +941,9 @@ export function registerTrustCommands(trust: Command, ctx: CLIPluginContext, dep
 
   const configCmd = trust.command('config').description('Manage Trust deployment configurations');
   registerConfigCommands(configCmd, ctx);
+
+  const incidentCmd = trust.command('incident').description('Capture and manage ISMS incidents in the Trust portal');
+  registerIncidentCommands(incidentCmd, ctx, incidentDeps);
 }
 
 export type { CLIPlugin };
