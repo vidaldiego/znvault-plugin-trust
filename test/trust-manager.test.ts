@@ -14,9 +14,9 @@ describe('resolveConfig', () => {
   });
 
   it('honors explicit appRoot/user overrides, still defaulting journalPath', () => {
-    expect(resolveConfig({ appRoot: '/srv/trust', user: 'svc-trust' })).toEqual({
+    expect(resolveConfig({ appRoot: '/srv/trust', user: 'deploy-user' })).toEqual({
       appRoot: '/srv/trust',
-      user: 'svc-trust',
+      user: 'deploy-user',
       journalPath: '/var/lib/zn-vault-agent/trust-deploy-journal.json',
     });
   });
