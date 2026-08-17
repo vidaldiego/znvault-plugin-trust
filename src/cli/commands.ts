@@ -77,6 +77,7 @@ import {
 } from '@zincapp/znvault-deploy-core';
 import { getErrorMessage } from '../utils/error.js';
 import { registerIncidentCommands, type IncidentCommandDeps } from './incident/commands.js';
+import { registerProviderCommands, type ProviderCommandDeps } from './provider/commands.js';
 import { makeTrustRunPhase, type RunnerDeps } from './migration-runner.js';
 import {
   uploadRelease as uploadReleaseFn,
@@ -932,6 +933,7 @@ export function registerTrustCommands(
   ctx: CLIPluginContext,
   deps?: DeployCommandDeps,
   incidentDeps?: IncidentCommandDeps,
+  providerDeps?: ProviderCommandDeps,
 ): void {
   const deployCmd = trust.command('deploy').description('Deploy the Trust portal (release-dir + chunked upload + atomic activation)');
   registerDeployCommands(deployCmd, ctx, deps);
@@ -944,6 +946,9 @@ export function registerTrustCommands(
 
   const incidentCmd = trust.command('incident').description('Capture and manage ISMS incidents in the Trust portal');
   registerIncidentCommands(incidentCmd, ctx, incidentDeps);
+
+  const providerCmd = trust.command('provider').description('Register the services the portal pulls evidence from');
+  registerProviderCommands(providerCmd, ctx, providerDeps);
 }
 
 export type { CLIPlugin };

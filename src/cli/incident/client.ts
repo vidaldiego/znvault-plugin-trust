@@ -25,6 +25,29 @@ export type IncidentStatus = 'OPEN' | 'INVESTIGATING' | 'MITIGATED' | 'RESOLVED'
 
 export type IncidentRegime = 'ISO_27001' | 'GDPR_BREACH';
 
+/** `POST /api/v1/providers` — register a TrustProvider. */
+export interface RegisterProviderBody {
+  service: string;
+  baseUrl: string;
+  /**
+   * The provider's manifest, supplied at registration and NOT optional.
+   *
+   * manifest/evidence/status are pulled on three independent queues with no
+   * ordering. If evidence wins that race against an empty manifest, the mapper
+   * resolves zero control codes and the snapshot is stored anyway — no links,
+   * no error, and no second chance, because nothing re-maps a stored snapshot.
+   * Registering with the manifest already present makes the mapping correct
+   * whichever job lands first.
+   */
+  manifestJson: Record<string, unknown>;
+  webhookMaxSilence?: number;
+}
+
+export interface RegisterProviderResult {
+  id: string;
+  created: boolean;
+}
+
 /** `POST /api/v1/security-events` — manual candidate capture (design §4.1). */
 export interface CaptureEventBody {
   sourceEventId: string;
@@ -194,6 +217,26 @@ export class TrustIncidentClient {
   /** `POST /api/v1/security-events` — idempotent on `sourceEventId`. */
   async captureEvent(body: CaptureEventBody): Promise<CaptureResult> {
     return this.postJson<CaptureResult>('/api/v1/security-events', body);
+  }
+
+  // ------------------------------------------------------------- providers
+
+  /**
+   * `POST /api/v1/providers` — register (or re-register) a TrustProvider.
+   *
+   * Lives on this client rather than a new one because the transport is the
+   * whole value here: login, single-shot 401 retry and error guidance are
+   * already solved, and a second copy of that is a second place for the TOTP
+   * clock to go wrong.
+   *
+   * Upsert on `service`, so re-running to correct a baseUrl or a drifted
+   * manifest is the same command. The portal records PROVIDER_REGISTERED in its
+   * hash-chained audit log on every call — which is the reason this goes
+   * through the API and not through the database the deploy path already has
+   * credentials for.
+   */
+  async registerProvider(body: RegisterProviderBody): Promise<RegisterProviderResult> {
+    return this.postJson<RegisterProviderResult>('/api/v1/providers', body);
   }
 
   /** `POST /api/v1/incidents/ingest` — idempotent on `ingestKey`. */
